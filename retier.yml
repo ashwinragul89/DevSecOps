@@ -1,0 +1,59 @@
+#Retire-JS CI Gitlab scans
+#-------------------------
+image: docker:20.10
+
+  services:
+  - docker:dind       # To run all jobs in this pipeline, use a docker image which contains a docker daemon running inside (dind - docker in docker). Reference: https://forum.gitlab.com/t/why-services-docker-dind-is-needed-while-already-having-image-docker/43534
+
+ 
+  
+oast-retire:
+  stage: test
+  image: node:alpine3.10 #docker pull demo.goharbor.io/app/node@sha256:7cc1b6e5ba03b2eb53c7c676757e89a0e2bbd8572464cd3e270000edd82c7006
+  before_script:
+    - npm install             # Install the dependencies before scans
+    - npm install -g retire@5.0.0   # Install retirejs tool
+  script:
+    # - retire --outputformat json --outputpath retirejs-report.json --severity high # if reguired to show only high
+    - retire --outputformat json --outputpath retirejs-report.json
+  
+  artifacts:
+    paths:
+      - retirejs-report.json
+    untracked: false
+    when: always
+    access: all
+    expire_in: 1 days
+  allow_failure: true
+
+--- 
+
+oast-frontend:
+  stage: test
+  variables:
+    Akey: "42ead735-e4ae-4d2d-8dee-8467aa9d5a8c" # Generate for user ashwinragul form safety
+    outfile: "safety-result.html"
+  # image: 
+  #   name: ghcr.io/pyupio/safety
+  #   entrypoint: [""]
+  before_script:
+    - rm -f $outfile
+    - export SAFETY_API_KEY=$Akey
+    - echo $SAFETY_API
+  script:
+    # - safety --key "$SAFETY_API_KEY" scan  --output html > safety-output.html
+    - docker run --user $(id -u):$(id -g) --rm -v $(pwd):/opt/ ghcr.io/pyupio/safety --key "$SAFETY_API_KEY" scan /opt/  --output html > $outfile
+    # - safety check -r requirements.txt --json > safety-output.json.
+  
+  artifacts:
+    paths:
+      - $outfile
+    untracked: false
+    when: always
+    access: all
+    expire_in: 1 days
+  allow_failure: true
+  
+  
+--- 
+
