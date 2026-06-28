@@ -55,5 +55,22 @@ oast-frontend:
   allow_failure: true
   
   
---- 
+# ++++++++++++++++++++++++++++++++++++++++++ JAVA depcheck ANALYZER +++++++++++++++++++++++++++++++++++++++++++++++
+ 
 
+odc-backend:
+  stage: test
+  image: gitlab/dind:latest
+  script:
+    - chmod +x ./run-depcheck.sh
+    - mkdir -p reports
+    # Note: The Docker volume mount in run-depcheck.sh persists the report file from container to host.
+    # The output redirection here captures script logs to stdout for artifact collection.
+    - ./run-depcheck.sh > reports/dependency-check-report.json
+  artifacts:
+    paths:
+      - reports/dependency-check-report.json
+    when: always
+    expire_in: one week
+  rules:
+    - if: $CI_COMMIT_BRANCH
