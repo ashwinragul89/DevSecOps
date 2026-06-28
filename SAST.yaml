@@ -1,0 +1,104 @@
+image: docker:20.10
+services:
+  - docker:dind       # To run all jobs in this pipeline, use a docker image which contains a docker daemon running inside (dind - docker in docker). Reference: https://forum.gitlab.com/t/why-services-docker-dind-is-needed-while-already-having-image-docker/43534
+
+stages:
+  - test
+  - secret-detection
+  - scanning
+
+trufflehog-git-secrets:
+  stage: test
+  variables:
+    outfile: "trufflehog-output.json"
+    cert: "GIT_SSL_NO_VERIFY=true"
+  script:
+    - docker pull ghcr.io/trufflesecurity/trufflehog:latest
+    # - docker run --user $(id -u):$(id -g) -v $(pwd):/src --rm hysnsec/trufflehog $CI_REPOSITORY_URL
+    - echo $CI_REPOSITORY_URL
+    - docker run --user $(id -u):$(id -g) -e $cert -v $(pwd):/src --rm ghcr.io/trufflesecurity/trufflehog:latest git $CI_REPOSITORY_URL --filter-entropy=3  --max-decode-depth=5 --fail --json | tee $outfile
+   
+  artifacts:
+    paths:
+      - $outfile
+    untracked: false
+    when: always
+    access: all
+    expire_in: 1 days
+  allow_failure: true
+  
+  
+# ++++++++++++++++++++++++++++++++++++++++++ Git Leaks +++++++++++++++++++++++++++++++++++++++++++++++
+
+variables:
+  # Setting this variable affects all Security templates
+  # (SAST, Dependency Scanning, ...)
+  SECURE_ANALYZERS_PREFIX: "$CI_TEMPLATE_REGISTRY_HOST/security-products"
+  #
+  SECRET_DETECTION_IMAGE_SUFFIX: ""
+  SECRETS_ANALYZER_VERSION: "7"
+  SECRET_DETECTION_EXCLUDED_PATHS: ""
+
+.secret-analyzer:
+  stage: test
+  image: "$SECURE_ANALYZERS_PREFIX/secrets:$SECRETS_ANALYZER_VERSION$SECRET_DETECTION_IMAGE_SUFFIX"
+  services: []
+  allow_failure: true
+  variables:
+    GIT_DEPTH: "50"
+  # `rules` must be overridden explicitly by each child job
+  # see https://gitlab.com/gitlab-org/gitlab/-/issues/218444
+  artifacts:
+    access: 'all'
+    reports:
+      secret_detection: gl-secret-detection-report.json
+    paths: [gl-secret-detection-report.json]
+
+gitleaks_secret_detection:
+  extends: .secret-analyzer
+  rules:
+    # The following 3 blocks of rules define whether the job runs in a an *MR pipeline* or a *branch pipeline*
+    # when an MR exists. If the job has additional rules to observe they should be added in the blocks 1 and 3
+    # to cover both the *MR pipeline* and the *branch pipeline* workflows.
+
+    # 1. Run the job in an *MR* pipeline if MR pipelines for AST are enabled and there's an open merge request.
+    - if: $AST_ENABLE_MR_PIPELINES == "true" &&
+          $CI_PIPELINE_SOURCE == "merge_request_event"
+    # 2. Don't run the job in a *branch pipeline* if *MR pipelines* for AST are enabled and there's an open merge request.
+    - if: $AST_ENABLE_MR_PIPELINES == "true" &&
+          $CI_OPEN_MERGE_REQUESTS
+      when: never
+    # 3. Finally, run the job in a *branch pipeline* (When MR pipelines are disabled for AST, or it is enabled but no open MRs exist for the branch).
+    - if: $CI_COMMIT_BRANCH
+  script:
+    - /analyzer run
+
+
+
+
+# ++++++++++++++++++++++++++++++++++++++++++ SMEGREP Tempaltes  +++++++++++++++++++++++++++++++++++++++++++++++
+
+#Description: to run the Source code analyzer for all lanugage - in-built gitlab Tempaltes 
+
+include:
+    - template: Security/SAST.gitlab-ci.yml
+    
+
+
+
+
+# ++++++++++++++++++++++++++++++++++++++++++ Bandit - Python SOURCE CODE & Secrets ANALYZER +++++++++++++++++++++++++++++++++++++++++++++++
+
+#Description: to run the pythion source code analyzer - bandit
+
+Bandit-py-scans:
+  stage: test
+  image: python:3.6
+  before_script:
+   - pip3 install bandit
+  script:
+   - bandit -r . -f html | tee bandit-output.html
+  artifacts:
+    paths: [bandit-output.html]
+    when: always
+  allow_failure: true
