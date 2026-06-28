@@ -2,6 +2,8 @@ image: docker:20.10
 services:
   - docker:dind       # To run all jobs in this pipeline, use a docker image which contains a docker daemon running inside (dind - docker in docker). Reference: https://forum.gitlab.com/t/why-services-docker-dind-is-needed-while-already-having-image-docker/43534
 
+# ++++++++++++++++++++++++++++++++++++++++++ trufflehog-git-secrets +++++++++++++++++++++++++++++++++++++++++++++++
+
 stages:
   - test
   - secret-detection
@@ -26,7 +28,8 @@ trufflehog-git-secrets:
     access: all
     expire_in: 1 days
   allow_failure: true
-  
+  rules:
+    - if: $CI_COMMIT_BRANCH 
   
 # ++++++++++++++++++++++++++++++++++++++++++ Git Leaks +++++++++++++++++++++++++++++++++++++++++++++++
 
@@ -83,10 +86,6 @@ gitleaks_secret_detection:
 include:
     - template: Security/SAST.gitlab-ci.yml
     
-
-
-
-
 # ++++++++++++++++++++++++++++++++++++++++++ Bandit - Python SOURCE CODE & Secrets ANALYZER +++++++++++++++++++++++++++++++++++++++++++++++
 
 #Description: to run the pythion source code analyzer - bandit
@@ -102,3 +101,59 @@ Bandit-py-scans:
     paths: [bandit-output.html]
     when: always
   allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+# ++++++++++++++++++++++++++++++++++++++++++ Brakeman - Puby & rails SOURCE CODE & Secrets ANALYZER +++++++++++++++++++++++++++++++++++++++++++++++
+
+Brake-man-SAST:
+  stage: test
+  variables:
+    ouutfile: "brakeman_results.html"
+  image: 
+    name: presidentbeef/brakeman:v8.0.5  
+    entrypoint: ['']
+  before_script:
+    - rm -f $ouutfile    # for brakeman.igonre to exception
+  script:
+    - /usr/src/app/bin/brakeman -A -f html -o $ouutfile # cahnge html to json to get the json file
+  artifacts:
+    paths:
+      - $ouutfile
+    untracked: false
+    when: always
+    access: all
+    expire_in: 1 days
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+  
+  
+ # ++++++++++++++++++++++++++++++++++++++++++ FindSecBugs java scan scan +++++++++++++++++++++++++++++++++++++++++++++++
+ 
+ include:
+  - template: Jobs/SAST.gitlab-ci.yml
+
+variables:
+  # Exclude Semgrep and enable SpotBugs (which includes FindSecBugs)
+  #SAST_EXCLUDED_ANALYZERS: "semgrep, flawfinder, phpcs-security-audit, bandit, brakeman, gosec, mssqlsec, pmd-apex, security-code-scan, sobelow, webgoat"
+  SAST_EXCLUDED_ANALYZERS: "semgrep"
+
+spotbugs-sast:
+  extends: .sast-analyzer
+  variables:
+    SAST_JAVA_VERSION: "17" # Adjust to match your project's Java version (e.g., 11, 17, 21)
+  after_script:
+   # - echo "Current directory:" $(pwd)
+   # - find . -name "*.json"
+   # - find /tmp -name "*.json" 2>/dev/null
+   # - find / -name "gl-sast-report.json" 2>/dev/null
+  rules:
+    - if: $CI_COMMIT_BRANCH # Runs the scan on every commit
+  artifacts:
+    name: sast
+    paths:
+      - gl-sast-report.json
+    reports:
+      sast: gl-sast-report.json
+    when: always
