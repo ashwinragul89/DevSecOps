@@ -11,10 +11,11 @@ nikto-DAST:
   before_script:
     - rm -f $ouutfile    # for brakeman.igonre to exception
   script:
+    - cd /tmp/
     - nikto.pl -h $url -Plugins "all" -o $ouutfile -Format htm
   artifacts:
     paths:
-      - /tmp/$ouutfile
+      - $ouutfile
     untracked: false
     when: always
     access: all
@@ -28,7 +29,7 @@ sslyze-DAST:
   stage: test
   variables:
     ouutfile: "sslyze_results.txt"
-    url: "https://prod-qpv7l348.lab.practical-devsecops.training" #change the URL 
+    url: "prod-qpv7l348.lab.practical-devsecops.training:443" #change the HOST and Port 
   image: 
     name: nablac0d3/sslyze 
     entrypoint: ['']
