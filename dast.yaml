@@ -1,0 +1,49 @@
+#DAST - Dynamic App Sec Test
+# ++++++++++++++++++++++++++++++++++++++++++ Nikto APP Scan +++++++++++++++++++++++++++++++++++++++++++++++
+nikto-DAST:
+  stage: test
+  variables:
+    ouutfile: "nikto_results.html"
+    url: "https://prod-qpv7l348.lab.practical-devsecops.training/" #change the URL 
+  image: 
+    name: ghcr.io/sullo/nikto 
+    entrypoint: ['']
+  before_script:
+    - rm -f $ouutfile    # for brakeman.igonre to exception
+  script:
+    - nikto.pl -h $url -Plugins "all" -o $ouutfile -Format htm
+  artifacts:
+    paths:
+      - /tmp/$ouutfile
+    untracked: false
+    when: always
+    access: all
+    expire_in: 1 days
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+# ++++++++++++++++++++++++++++++++++++++++++ SSLYZE - SSL SCAN  +++++++++++++++++++++++++++++++++++++++++++++++
+sslyze-DAST:
+  stage: test
+  variables:
+    ouutfile: "sslyze_results.txt"
+    url: "https://prod-qpv7l348.lab.practical-devsecops.training" #change the URL 
+  image: 
+    name: nablac0d3/sslyze 
+    entrypoint: ['']
+  before_script:
+    - rm -f $ouutfile    # for brakeman.igonre to exception
+  script:
+    - /opt/venv/bin/sslyze --regular  $url > $ouutfile 
+  artifacts:
+    paths:
+      - $ouutfile
+    untracked: false
+    when: always
+    access: all
+    expire_in: 1 days
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+  
