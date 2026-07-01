@@ -36,7 +36,7 @@ sslyze-DAST:
   before_script:
     - rm -f $ouutfile    # for brakeman.igonre to exception
   script:
-    - /opt/venv/bin/sslyze --regular  $url > $ouutfile 
+    - /opt/venv/bin/sslyze $url > $ouutfile 
   artifacts:
     paths:
       - $ouutfile
